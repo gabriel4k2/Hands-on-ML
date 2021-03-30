@@ -1,20 +1,23 @@
 #!/usr/bin/env python
 # coding: utf-8
-
 # In[14]:
 
 
-import os, tarfile
-import email
-import numpy as np  
-from sklearn.datasets import load_files
-from sklearn.base import *
-from sklearn.model_selection import StratifiedShuffleSplit
-from email.parser import BytesParser, Parser
+import os
+import tarfile
+import html2text
+
+
+from email.parser import Parser
 from email.policy import default
+from sklearn.base import *
+from sklearn.datasets import load_files
+from sklearn.model_selection import StratifiedShuffleSplit
+
 dataset_path = "dataset/"
 only_easy_ham = True
 email_parser = None
+htmlconverter = None
 
 def extract_bz2(filename, path="."):
     with tarfile.open(filename, "r:bz2") as tar:
@@ -28,8 +31,6 @@ def removeHardHam(data, targets, hard_ham_index):
         
     return np.delete(data, _to_delete),  np.delete(targets, _to_delete)
 
-def get_data_index_from_name(name):
-    pass
 
 #The dataset has multiple labels such as easy_ham, easy_ham2,
 # we want to simply convert to ham or spam
@@ -43,7 +44,7 @@ def binarizeLabels(targets):
     return targets
 
 '''
-getEmailPayload helper
+processEmailPayload helper
 Only process text/plain or text/html. Images/gifs or other multimedia are not useful. Multiparts are also not
 useful because they will be visited later with walk()
 
@@ -58,7 +59,21 @@ def processMessageObj(message_object):
         #TODO preprocess html
         _body = message_object.get_payload(decode=True)
         _body = _body.decode('latin-1')
+        transformHTMLtoPlain(_body)
+
     return _body
+
+def transformHTMLtoPlain(_str, ignore_images=True):
+    global htmlconverter
+
+    if htmlconverter is None:
+        htmlconverter = html2text.HTML2Text()
+
+    if ignore_images:
+        htmlconverter.ignore_images = True
+
+    htmlconverter.protect_links = True
+    return _str
 
 def getEmailSubject(email_message ):
     global email_parser
@@ -71,7 +86,7 @@ def getEmailSubject(email_message ):
     return email_message["subject"]
 
 
-def getEmailPayload(email_message ):
+def processEmailPayload(email_message, to_lower_case ):
     body = ""
     global email_parser
 
@@ -93,7 +108,8 @@ def getEmailPayload(email_message ):
         body = body +  processMessageObj(email_message) if _temp is not None else body
 
 
-
+    if to_lower_case:
+        body = body.lower()
     return body
 
 
@@ -106,24 +122,19 @@ def convertIndexToString(targets, index_to_string_dict):
     return np.asarray(new_targets )
 
 class PreprocessStrToEmail(BaseEstimator, TransformerMixin):
-    def __init__(self,  subject=True): # no *args or **kargs
+    def __init__(self,  subject=True, to_lower_case= False): # no *args or **kargs
         self.subject = subject
+        self.to_lower_case = to_lower_case
     def fit(self, X, y=None):
         return self # nothing else to do
     def transform(self, X, y=None):
         _parser = Parser(policy=default)
-        #parsestr(_data[0].decode('UTF-8'))
-        #_X = np.asarray(X)
-        #_X = np.array([_parser.parsestr(x.decode('UTF-8'))] for x in _X)
 
-            #X = np.array(getEmailPayload(x) for x in X)
-           # X = getEmailPayload(X)
-            #X = np.array(list(map(getEmailPayload, X)))
-        _X1 = np.array([getEmailPayload(xi) for xi in X])
+        _X1 = np.array([processEmailPayload(xi, self.to_lower_case ) for xi in X])
         if self.subject:
             _X2 =  np.array([getEmailSubject(xi) for xi in X])
             return np.c_[_X1,_X2]
-            #temp = np.apply_along_axis(func1d=getEmailPayload, axis=0, arr=X)
+            #temp = np.apply_along_axis(func1d=processEmailPayload, axis=0, arr=X)
 
 
         return _X1
@@ -227,9 +238,9 @@ print(spam_occurrences/ham_occurrences)
 # In[15]:
 
 
-pre_process = PreprocessStrToEmail()
+pre_process = PreprocessStrToEmail(to_lower_case=True)
 pre_process.fit_transform(_data)
-_duh = getEmailPayload(_data[0])
+_duh = processEmailPayload(_data[0])
 
 
 # In[8]:
