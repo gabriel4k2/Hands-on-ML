@@ -60,7 +60,18 @@ def processMessageObj(message_object):
         _body = _body.decode('latin-1')
     return _body
 
-def getEmailPayload(email_message):
+def getEmailSubject(email_message ):
+    global email_parser
+
+    if email_parser is None:
+        email_parser = Parser(policy=default)
+
+    email_message = email_parser.parsestr(email_message.decode('iso-8859-1')) #UTF-8 does not work (some email have latin chars
+
+    return email_message["subject"]
+
+
+def getEmailPayload(email_message ):
     body = ""
     global email_parser
 
@@ -69,20 +80,20 @@ def getEmailPayload(email_message):
 
     email_message = email_parser.parsestr(email_message.decode('iso-8859-1')) #UTF-8 does not work (some email have latin chars
 
+
+
     if email_message.is_multipart():
         for part in email_message.walk():
             _temp = processMessageObj(part)
             if _temp is not None:
                 body = body + _temp
-            # if part.is_multipart():
-            #     for subpart  in part.get_payload(): #when multipart, a list is returned
-            #         body = body + subpart.get_payload()
 
-            # else:
-            #     if part.get_all('Content-Transfer-Encoding') == 'base64':
-            #         pass #converter base64 para string
     else:
-        body = processMessageObj(email_message)
+        _temp  =  processMessageObj(email_message)
+        body = body +  processMessageObj(email_message) if _temp is not None else body
+
+
+
     return body
 
 
@@ -95,8 +106,8 @@ def convertIndexToString(targets, index_to_string_dict):
     return np.asarray(new_targets )
 
 class PreprocessStrToEmail(BaseEstimator, TransformerMixin):
-    def __init__(self, only_body = True): # no *args or **kargs
-        self.only_body = only_body
+    def __init__(self,  subject=True): # no *args or **kargs
+        self.subject = subject
     def fit(self, X, y=None):
         return self # nothing else to do
     def transform(self, X, y=None):
@@ -104,15 +115,18 @@ class PreprocessStrToEmail(BaseEstimator, TransformerMixin):
         #parsestr(_data[0].decode('UTF-8'))
         #_X = np.asarray(X)
         #_X = np.array([_parser.parsestr(x.decode('UTF-8'))] for x in _X)
-        if self.only_body:
+
             #X = np.array(getEmailPayload(x) for x in X)
            # X = getEmailPayload(X)
-            X = np.array(list(map(getEmailPayload, X)))
+            #X = np.array(list(map(getEmailPayload, X)))
+        _X1 = np.array([getEmailPayload(xi) for xi in X])
+        if self.subject:
+            _X2 =  np.array([getEmailSubject(xi) for xi in X])
+            return np.c_[_X1,_X2]
             #temp = np.apply_along_axis(func1d=getEmailPayload, axis=0, arr=X)
 
-        else:
-            pass
-        return X
+
+        return _X1
 
 
         
